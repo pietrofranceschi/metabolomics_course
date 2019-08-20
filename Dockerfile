@@ -5,6 +5,8 @@ FROM rocker/verse:3.6.1
 # Install Python 3
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    libfftw3-dev \
+    libtiff5-dev \
     python3 \
     python3-dev \
     python3-pip \
