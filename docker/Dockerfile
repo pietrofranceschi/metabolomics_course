@@ -4,7 +4,7 @@ FROM rocker/verse:3.6.1
 
 # Install Python 3
 RUN apt-get update \
-  apt-get install -y --no-install-recommends \
+  && apt-get install -y --no-install-recommends \
     python3 \
     python3-dev \
     python3-pip \
