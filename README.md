@@ -1,1 +1,1 @@
-# metabolomics_course
+# Metabolomics Course
