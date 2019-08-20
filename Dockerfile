@@ -42,16 +42,21 @@ RUN install2.r --error \
     markdown \
     rmarkdown \
     yaml \
-    reticulate \
-    ncdf4
+    reticulate
+   
 
 # Install other R packages
 RUN install2.r --error \
     -r "https://cran.rstudio.com" \
     -r "http://www.bioconductor.org/packages/release/bioc" \
-    RColorBrewer 
+    RColorBrewer \ 
+    ncdf4 \
+    xcms \
+    ptw \
+    FactoMineR \
+    factoextra
+    
 
-RUN Rscript -e "source("http://bioconductor.org/biocLite.R")" -e "biocLite("xcms")"
 
 # Clean
 RUN apt-get clean \
