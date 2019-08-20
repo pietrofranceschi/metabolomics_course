@@ -12,10 +12,10 @@ RUN apt-get update \
     git
 
 RUN pip3 install \
-  wheel
+  wheel \
+  numpy
 
 RUN pip3 install \
-  numpy \
   scipy \
   pandas \
   scikit-learn \
@@ -52,7 +52,7 @@ RUN apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir data
-COPY ../data data 
+COPY data data 
 
 RUN mkdir notebooks
-COPY ../notebooks notebooks
+COPY notebooks notebooks
