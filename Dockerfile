@@ -12,6 +12,7 @@ RUN apt-get update \
     python3-pip \
     python3-setuptools \
     python3-tk \
+    libnetcdf-dev \
     git
 
 RUN pip3 install \
@@ -41,13 +42,16 @@ RUN install2.r --error \
     markdown \
     rmarkdown \
     yaml \
-    reticulate
+    reticulate \
+    ncdf4
 
 # Install other R packages
 RUN install2.r --error \
     -r "https://cran.rstudio.com" \
     -r "http://www.bioconductor.org/packages/release/bioc" \
     RColorBrewer 
+
+RUN Rscript -e "source("http://bioconductor.org/biocLite.R")" -e "biocLite("xcms")"
 
 # Clean
 RUN apt-get clean \
