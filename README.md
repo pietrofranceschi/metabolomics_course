@@ -10,14 +10,29 @@ Note:
 > Files stored outside the `host` directory will be lost when you stop the
 container.
 
-## Build and run the container
+
+## Option 1: Run the container from Docker Hub (Linux host)
+
+```sh
+docker run --rm -d -p 8787:8787 -e DISABLE_AUTH=true --name metabolomics_course \
+    -v$HOME:/home/rstudio/host \
+    pietrofranceschi/metabolomics_course
+```
+
+## Option 2: Build and run the container (Linux host)
 
 ```sh
 git clone https://github.com/pietrofranceschi/metabolomics_course.git
 cd metabolomics_course
 docker build . --tag metabolomics_course
-./run
+docker run --rm -d -p 8787:8787 -e DISABLE_AUTH=true --name metabolomics_course \
+    -v$HOME:/home/rstudio/host \
+    metabolomics_course
 ```
+
+## Open RStudio
+
+Open a browser and go to 127.0.0.1:8787.
 
 ## Stop (and destroy) the container
 
