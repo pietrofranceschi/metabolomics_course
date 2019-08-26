@@ -63,8 +63,12 @@ RUN apt-get clean \
   && rm -rf /tmp/downloaded_packages/* \
   && rm -rf /var/lib/apt/lists/*
 
+USER rstudio
+
 RUN mkdir /home/rstudio/data
 COPY data /home/rstudio/data 
 
 RUN mkdir /home/rstudio/notebooks
 COPY notebooks /home/rstudio/notebooks
+
+USER root
