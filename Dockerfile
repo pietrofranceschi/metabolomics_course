@@ -54,7 +54,8 @@ RUN install2.r --error \
     xcms \
     ptw \
     FactoMineR \
-    factoextra
+    factoextra \
+    plotly
     
 
 
