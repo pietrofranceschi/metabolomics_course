@@ -1,0 +1,202 @@
+---
+title: "Peak Detection"
+author: "Pietro Franceschi"
+date: "28/08/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+## load the library
+library(xcms)
+## this library allows the "interactive" plots
+library(plotly)
+```
+
+
+## Introduction
+
+As we discussed in the lecture, metabolites produce peaks in the LC-MS 2D data, but a single metabolite is likely to produce a large number of peaks due to the nature of the ionization process occuring inside the MS interface. 
+Even with this added level of complexity (which generates a "redundant" data matrix with all the associated caveats), to detect metabolites it is necessary to be able to automatically detect peaks and ...
+
+* there are a lot of different algorithms which can do that
+* each algorithm has its strengths and limitations
+* each algorith has a specific set of parameters which should be optimized to get out the best
+* each algorithm will make errors
+* a suboptimal choice at this stage cannot be "compensated" further on
+
+... so be careful, and take your time to strive for "the best"
+
+
+
+First of all let's read in ine of our apple injections
+
+```{r}
+apple1 <- readMSData(files = "/home/rstudio/data/apple_control_neg_001.CDF",
+                     mode = "onDisk")
+```
+
+
+
+
+### Matched Filter 
+The first and "simpler" peak detection algorithm we discussed is "Matched Filter". Its implementation goes back to the early days of xcms (2006).
+As usual, the algorithm has a substantial number of parameters, which will affect the results of the process. Here we will focus on three of them:
+
+* binSize: which defines the width of the m/z slice used to reconstruct the extracted ion chromatograms
+* snthresh: which defines a custom cutoff level to distinguish peaks from noise
+* fwhm: which defines full width at half maximum of matched filtration gaussian model peak
+
+In the "new" xcms version, the parameters are stored into specific objects to make the code less cluttered.
+
+```{r}
+## set the parameters
+matc_param <- MatchedFilterParam(binSize = 2, snthresh = 10, fwhm = 20)
+## show them, just in case ...
+matc_param
+```
+
+After this step, the peak detection is strightforward
+
+```{r}
+apple_peaks <- findChromPeaks(apple1, param = matc_param)
+
+## the actual "position" position of the peaks can be seen by using the chromPeaks method
+head(chromPeaks(apple_peaks))
+```
+
+
+Here we have a table with several columns ... can you figure out the meaning of each one of them?
+
+
+A visual representation of the peak position will surely help 
+
+First we get the bpi
+```{r}
+applebpi <- chromatogram(apple1, aggregationFun = "max")
+```
+
+Then we extract the position of the peaks
+
+```{r}
+pk <- chromPeaks(apple_peaks)
+```
+
+And finally we plot!
+
+```{r message=FALSE}
+map <- plot_ly() %>%
+  add_markers(x = pk[,"rt"], y = pk[,"mz"], opacity = 0.7)
+
+BPI <- plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = rtime(applebpi[[1]]), 
+            y = intensity(applebpi[[1]]), mode = "lines") %>% 
+  layout(xaxis = list(title = "rt")
+  )
+
+
+subplot(map, BPI, nrows = 2, shareX = TRUE, heights = c(0.8, 0.2))
+```
+
+
+Some question and something to try
+
+* What happens if you tweek the parameters (Warning: do not reduce too much the bin size ;-))?
+* Many of the peaks are arranged in vertical lines ... why?
+* Any idea about the optimal parameters? How should one set them?
+
+
+### CentWave
+CentWave is the second peak detection algorithm we will briefly touch. As discussed in the lecture it works well for high resolution/high accuracy instruments. The idea is really smart and the detailed can be found in a BMC Bioinformatics publication.
+
+
+As for MatchedFilter, there is plenty of space to tweak the parameters ... here we will mention only four of them
+
+* ppm: this is the "width" of the mass stability region
+* snthresh: imagine   ;-)
+* peakwidth: this is the proposed interval of the chromatographic peak width. Notice that, in comparison to matched filter, here we have two numbers. Under the hood this is related to the wavelet based filtering.
+* prefilter c(k, I): this seemingly obscure couple of numbers is used to select the singnals which will be subjected to ROI detection. Mass traces will be teken into consideration only if they contain k peaks with intensity higher than I.
+
+
+```{r}
+## set the parameters
+cw_param <- CentWaveParam(ppm = 50, snthresh = 10, peakwidth = c(6,30), prefilter = c(3,100))
+## show them, just in case ...
+cw_param
+```
+
+
+Now we run the algorithm ...
+
+```{r}
+apple_peaks1 <- findChromPeaks(apple1, param = cw_param)
+
+## the actual "position" position of the peaks can be seen by using the chromPeaks method
+head(chromPeaks(apple_peaks1))
+```
+
+
+The look and feel of the output is almost the same. 
+
+Then we extract the position of the peaks
+
+```{r}
+pk1 <- chromPeaks(apple_peaks1)
+```
+
+And finally we plot!
+
+```{r message=FALSE}
+map <- plot_ly() %>%
+  add_markers(x = pk1[,"rt"], y = pk1[,"mz"], opacity = 0.7)
+
+BPI <- plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = rtime(applebpi[[1]]), 
+            y = intensity(applebpi[[1]]), mode = "lines") %>% 
+  layout(xaxis = list(title = "rt")
+  )
+
+
+subplot(map, BPI, nrows = 2, shareX = TRUE, heights = c(0.8, 0.2))
+```
+
+As you can immediately see, the number of picked peaks is lower! 
+
+Some question and something to try
+
+* What happens if you tweek the parameters?
+* Do you see some "areas" where the two algorithms are giving clearly different results? Why?
+* Any idea about the optimal parameters? How should one set them?
+
+To help you in performing the comparison of the two methods I'm putting here some code to overlay the results ...
+
+
+```{r message=FALSE}
+plot_ly() %>%
+  add_trace(x = pk[,"rt"], y = pk[,"mz"], opacity = 0.5, name = 'MF', mode = 'markers', marker = list(color = "red")) %>% 
+  add_trace(x = pk1[,"rt"], y = pk1[,"mz"], opacity = 0.5, name = 'CW', mode = 'markers', marker = list(color = "darkblue"))%>% 
+  layout(xaxis = list(title = "rt"))
+
+```
+
+
+In conclusion, I would like to remark that xcms implements a large set of plotting utilities. They are not interactive (like in this demo), but can be used more efficiently on large datasets. For example, the peak positions can be visualized on a specific file 
+
+```{r}
+plotChromPeaks(apple_peaks, file = 1)
+```
+
+
+### On the choice of optimal parameters
+I'm quite convinced that one of the main outcomes of the previous exercise is the feeling that things can be really messed-up with the wrong choice of parameters. So the natural question is: "How can I find the best set ?".
+As a metter of fact, this is 
+
+
+
+
+
+
+

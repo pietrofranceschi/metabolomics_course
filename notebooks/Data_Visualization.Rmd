@@ -1,0 +1,208 @@
+---
+title: "Data_Visualization"
+author: "Pietro Franceschi"
+date: "26/08/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+The objective of this demo is to illustrate the basic tools which can be used to visualize data in xcms. Additional (and more detailed) informations can be found in the official package vignettes, available at https://bioconductor.org/packages/release/bioc/html/xcms.html.
+
+The tutorial is based on the "new" version of xcms, which has been the subject of an extensive upgrade from version 3.
+
+
+### A point on methodology
+
+As you will see, the practicals are organized as .Rmd files. This type of file can be easily used to integrate text and code chunks. Each code chunk can be run separately and the differennt parameters can be easily changed to inspect the results. My suggestion for the work is the following:
+
+* run the code and tweak the parameters
+* add text comment which can help you in remembering/understanding
+* save a copy of this file in your local machine, so you will be able to bring it home 
+
+
+### Data organization
+
+The characteristics and the format of LC-MS data has been already discussed in the lecture. xcms supports analysis of LC/MS data from files in (AIA/ANDI) NetCDF, mzML/mzXML and mzData format. For the actual data import Bioconductor’s mzR is used. Raw data can be quite large, so the package allows to load them in memory or keep them on disk. The first solution is clearly faster, but is impractical for large investigations. 
+
+### The data
+In this demo we will use a publicly available dataset  ....
+
+# Data Loading
+
+```{r message=FALSE}
+## load the library
+library(xcms)
+## this library allows the "interactive" plots
+library(plotly)
+```
+
+The data required for the demo are stored in the container (docker technical term!) under the "data" folder 
+
+```{r}
+cdfs <- list.files("/home/rstudio/data/", pattern = "CDF", full.names = TRUE)
+cdfs
+```
+
+As you can see we have two files, corresponding to the xcms analysis of two apple extracts
+
+The following code will read in one of them
+
+```{r}
+apple1 <- readMSData(files = cdfs[1],
+                     mode = "onDisk")
+
+apple1
+```
+
+The OnDiskMSnExp organizes the MS data by spectrum and provides the methods intensity,  mz and rtime to access the raw data from the files (the measured intensity values, the corresponding m/z and retention time values). In addition, the spectra method could be used to return all data encapsulated in Spectrum objects.
+
+
+As we discussed, LC-MS data are two dimensional, so we could be interested in inspecting:
+
+* The total ion current
+* The base peak ion chromatogram
+* The extracted ion chromatograms
+* The individual spectra
+
+
+```{r}
+## get the data as a list of spectra
+applespectra <- spectra(apple1)
+length(applespectra)
+```
+
+This number is exactly what one would expect considering the content of the header. 
+
+
+### Visualizing the individual spectra
+
+```{r}
+
+## change here the id of the spectrum
+spcid <- 30
+
+plot_ly(color = I("black"), showlegend = F) %>%
+  add_markers(x = mz(applespectra[[spcid]]), y = intensity(applespectra[[spcid]])) %>% 
+  add_segments(x = mz(applespectra[[spcid]]), 
+               xend = mz(applespectra[[spcid]]), 
+               y = 0, 
+               yend = intensity(applespectra[[spcid]]), showlegend = FALSE) %>% 
+  layout(
+    title = paste0("Spc ", spcid),
+    xaxis = list(title = "m/z")
+  )
+  
+
+```
+
+
+Some question and something to try
+
+* change the spectrum id and look to the changes in the spectra
+* we see many ions per spectrum. Is this necessarily meaning that we have many metabolites?
+* can you figure out why we have a lot of low intensity (around 1) signals?
+
+
+### Visualizing the total ion current and the bpi
+
+The total ion current (tic) chromatogram is obtained summing all the ionic signals collected at each scan. On the other hand, the base peak ion chromatogram (bpi) is obtained retaining only the signal of the highest intensity ion for each scan 
+
+
+```{r}
+tic <- chromatogram(apple1, aggregationFun = "sum")
+bpi <- chromatogram(apple1, aggregationFun = "max")
+```
+
+
+The following code plots the TIC, keeping the scan number on the x axis
+
+```{r message=FALSE}
+plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = 1: length(rtime(tic[[1]])), 
+             y = intensity(tic[[1]]), mode = "lines") %>% 
+  layout(
+    title = "TIC",
+    xaxis = list(title = "Scan Number")
+  )
+```
+
+
+
+```{r message=FALSE}
+plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = 1: length(rtime(bpi[[1]])), 
+             y = intensity(bpi[[1]]), mode = "lines") %>% 
+  layout(
+    title = "BPI",
+    xaxis = list(title = "Scan Number")
+  )
+```
+
+
+
+Some question and something to try
+
+* what are the peaks which show-up on the TIC priofile?
+* can you go back and check their spectra?
+* would you trust to what is coming out afer scan 1300?
+* can you figure out why the bpi is cleaner?
+* do you see a potential use of bpis and tics?
+
+### Visualizing the Extracted Ion Chromatograms
+
+The last important things to extract from raw data are ion specific chromatograms. As we discussed in the lecture, the ionization of a metabolite will produce a plethora of ions so peaks in specific extracted ion chromatograms will tell us that a metabolite is actually present in the samples. Extracted ion chromatograms (or traces) have to be extracted from the raw data with a instrument specific tolerance on the mass trace (normally down to some ppms for high res instruments). This tolerance account for the inherent variability in the spectrometer measuremet process.
+
+
+Cheching the presence and the shape of ion associated to know compounds in my matrix it is always a good starting point of a data analysis optimization. This will indeed allow to make an educated choice of the pipeline parameters. In the case of apple, a good candidate could be malic acid. 
+
+
+```{r}
+malic_acid <- chromatogram(apple1, mz = c(132.9,133.2))
+quercetin <- chromatogram(apple1, mz = c(288.9,289.1))
+```
+
+
+Plot the malic acid
+
+```{r message=FALSE}
+plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = 1: length(rtime(malic_acid[[1]])), 
+            y = intensity(malic_acid[[1]]), mode = "lines") %>% 
+  layout(
+    title = "Extracte Ion chromatogram",
+    xaxis = list(title = "Scan Number")
+  )
+```
+
+
+
+So malic acid is present and it is "eluted" at the very beginning of the chromatogram.  If we look to quercetin, instead
+
+```{r message=FALSE}
+plot_ly(color = I("black"), showlegend = F) %>%
+  add_trace(x = 1: length(rtime(quercetin[[1]])), 
+            y = intensity(quercetin[[1]]), mode = "lines") %>% 
+  layout(
+    title = "Extracte Ion chromatogram",
+    xaxis = list(title = "Scan Number")
+  )
+```
+
+Here the situation is more intriguing. We see peaks, but now more than one ...
+
+
+Some question and something to try
+
+* Sometimes I've multiple peaks. Why?
+* Play around with the m/z width ans look to what happens to the signal intensities
+* Try with another metabolites know to be present in apple (Procyanidin B2). To find the right ion look to the molecular properties in PubChem (https://pubchem.ncbi.nlm.nih.gov/)
+
+* ADVANCED: If you are familiar with R, most likely you noticed that all the "chormatograms" are actually stored in "list" like object. This is done because one could be interested in reading more than one raw data file at once. Try to play around with that.
+
+
+
+
