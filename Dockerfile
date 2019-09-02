@@ -55,7 +55,8 @@ RUN install2.r --error \
     ptw \
     FactoMineR \
     factoextra \
-    plotly
+    plotly \
+    BioMark
     
 
 
