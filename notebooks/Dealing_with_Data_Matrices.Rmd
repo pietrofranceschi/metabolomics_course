@@ -380,7 +380,7 @@ But here we see a really interesting phenomenon!
 
 Apparently,  many of the "color" markers are indeed variety markers. In terms of biology we could then say that in absence of the pigments the different varieties behave differently.
 
-To try to rationalize that, the "color" analysis should be complemented with a search for varietal biomarkes. Unfortunately performing this type of analysis we are facing one of the big weaknesses of the experimental design: the varieties are not represented by an equal number of samples, and this actually limitate our possibilities ...
+To try to rationalize that, the "color" analysis should be complemented with a search for varietal biomarkes. Unfortunately performing this type of analysis we are facing one of the big weaknesses of the experimental design: the varieties are not represented by an equal number of samples, and this actually limitate our possibilities
 
 ```{r}
 table(x2_imp$variety,x2_imp$color)
@@ -388,15 +388,146 @@ table(x2_imp$variety,x2_imp$color)
 
 Just for illustrative purposes we will focus on the varieties with more than 5 samples and use standard linear modeling to identify potential biomarkers by univariate analysis. This is a sort of ANOVA. As you will see the mechanics of such type of analyses is not strightforword. In addition, some of you could note that since we are working with log transformed intensities, a more principled choice would be to use a generalized model instead of a standard lm ... but I woul dconsider these as "advanced topics" and, if you are interested, just show up during the rest of the week ...  
 
+```{r}
+variety_anova <- x2_imp %>%
+  gather(metabolite, value,-color,-variety) %>% 
+  filter(variety %in% c("T","Her","AG","Abliss")) %>% 
+  mutate(variety = factor(variety, levels = c("AG","Abliss","Her","T"))) %>% 
+  group_by(metabolite) %>% 
+  do(tidy(lm(log10(value)~variety, data = .)))
 
+variety_anova
+  
+```
 
+With this type of coding, the intercept value is relative to AG (the only yellow variety), while the levels of the other metabolites are referenced to that
 
+```{r}
+x2_imp %>% 
+  filter(variety %in% c("T","Her","AG","Abliss")) %>% 
+  ggplot() + 
+  geom_jitter(aes(x = variety, y = log10(`3-OH-benzaldehyde`), col = color), width = 0.1) +
+  scale_color_brewer(palette = "Set1") + 
+  xlab("") + 
+  theme_light()
+```
 
+So we see that OH-benzadehide is a variaty marker, so we could hipothesize that its modulation id variaty specific.
+
+Some note in conclusion:
+
+* As in the previous case, p-values should be corrected for multiple testing, but remember that here we are getting four p-values per model so the correcion will be more strong than before
+* Some of the assumptions for ANOVA could be not valid ...
+* The actual structure of the model (the comparison we see in the output) can be quite tricky to control. This aspect is connected to the definition of the so called "contrasts"
 
 
 
 ## Data matrix analysis - Mulivariate
-PLS-(DA) and Random Forest
+
+The second possible strategy to analyze the data matrix is to rely on multivariate methods, which will take advantage of variable correlations to highlight the information "hidden" inside the data.
+
+The advantage, however, is not always immediate since, as we have seen, correlation is not necessary "informative" (go back and look to chance correlation) and the method is not able to distinguish "true" and "false" cases. The key idea which should be taken-up when using multivariate tools is VALIDATION, as we discussed in the lecture.
+
+Multivariate analysis can be performed with a large variaty of methods which differ in terms of complexity and assumptions. Here we will stick on PLS (Projection to Latent Structures) whci is quite pupular in metabolomics.
+
+In its simplest form, the PLS algorithm looks for orthogonal linear combinations of the varaibles measured in the data matrix which shows maximal covariance with a target variable Y. If the target variable is continuous this leads to a regression appraoch, if Y is categorical one ends up with a discriminat analysis. 
+
+
+In R PLS methods can be performed with many packges (a spetail mention for the "pls" package), here we will show how to perform PLS da by using the ropls package developed by E. Thevenot. This implementation is available as a web server within the french metabolomics initiative.
+
+The advantage of this package is that model tunig and model validation are performed under the hood, so outcomes are "easy" to read. KEep always in mind, however, that they have to be performed carefully to guarantee that the results will be valid
+
+
+```{r message=FALSE}
+library(ropls)
+```
+
+We then perform PLS-DA on the metabolomics data, log transformed predicting the color
+
+
+```{r}
+color.plsda <- opls(x = x2_imp %>% select(-color,-variety) %>% as.matrix(),
+                    y = x2_imp %>% pull(color),
+                    log10L = TRUE,
+                    fig.pdfC = NULL,
+                    info.txtC = NULL)
+```
+
+
+Here we use default settings, in this way the number of optimal model components is automatically evaluate and a validation by a permutation test is performed
+
+
+```{r}
+plot(color.plsda)
+```
+
+
+Top left: significance diagnostic: the R2Y and Q2Y of the model are compared with the corresponding values obtained after random permutation of the y response; Top right: inertia barplot: the graphic here suggests that 2 orthogonal components may be sufficient to capture most of the inertia; Bottom left: outlier diagnostics; Bottom right: x-score plot: the number of components and the cumulative R2X, R2Y and Q2Y are indicated below the plot.
+
+
+As we can see, we are indeed able to predict the color (better than with any random permutation of the color labels), as we could expect from the PCA plot. 
+
+
+The variables whic are more "relevant" topredict the color can be identified by plotting the regression coefficients
+
+
+```{r fig.height=10, fig.width= 8}
+color.plsda@coefficientMN %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "metabolite") %>% 
+  mutate(metabolite = fct_reorder(metabolite,abs(y1))) %>% 
+  ggplot() + 
+  geom_point(aes(x = abs(y1), y = metabolite)) + 
+  theme_light()
+  
+```
+
+Which is telling us that procyanidinB1 and quercetin-3,4-diglucoside are the main "players" able to distinguishing the berry colors. This is also easily visible in the metabolites plot discussed before. 
+
+The previous metabolites will also get significant p-values during univariate analysis, and this fact should not be unexpected.
+
+the last point I would like to illustrate is overfitting. If we compute a model for the random data (with two components)
+
+```{r}
+color.plsda_rnd <- opls(x = data_rnd %>% select(-color) %>% as.matrix(),
+                    y = data_rnd %>% pull(color),
+                    fig.pdfC = NULL,
+                    info.txtC = NULL,
+                    predI  =2)
+```
+
+and the plots ...
+
+```{r}
+plot(color.plsda_rnd, 
+     parEllipsesL = FALSE)
+```
+
+The scores are perfectly separated!Bat as you can see the permutation testing tells us that the overall performance of this PLS is comparable with the one you would obtain after random labeling of the color. The performance in validation RQ2 is also very low
+
+This should highlight you clearly the importance of validation!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
