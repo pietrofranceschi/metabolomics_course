@@ -56,7 +56,9 @@ RUN install2.r --error \
     FactoMineR \
     factoextra \
     plotly \
-    BioMark
+    BioMark \
+    corrplot \
+    ropls
     
 
 

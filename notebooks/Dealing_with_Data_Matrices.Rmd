@@ -1,0 +1,402 @@
+---
+title: "Dealing_with_Data_Matrices"
+author: "Pietro Franceschi"
+date: "02/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE}
+library(plotly)
+library(BioMark)
+library(factoextra)
+library(FactoMineR)
+library(tidyverse)
+```
+
+## Introduction
+
+The objective of this demo is to illustrate some of the general aspect one should consider when dealing with a data matrix, and to introduce  some of the basic data analysis strategie which can be applied.
+
+To illustrate these aspects we will use the data matrix obtained from a metabolomics on rubus secondary metabolism we performed at our institute.
+
+
+## The data
+
+Rubus Dataset (MTBLS333 - available on Metabolights).  
+Experimental design: 26(53) samples, 2 colors,  9 varieties, 2 locations
+Analytical Method: targeted and untargeted metabolomics
+
+
+## Targeted Dataset
+
+The targeted dataset can be loaded from the data folder
+
+```{r}
+load("/home/rstudio/data/rubusTargeted.RData")
+
+rubus_targeted
+```
+
+The table contains the outcomes of a LC-MS-MS quantification of 90 metabolites of different classes on a group of 53 raspberry samples. This is the typical result of a quantitative metabolomics investigation. 
+
+The first thing to do is to explore the data to:
+
+* identify the presence and the distribution of missing values
+* assess the distribution (in the statistical sense) of the variables
+* identify potentially problematic samples
+* assess the correlation among the variables
+
+
+at the end of this stage the analyst should be able to:
+
+* discard or highlight problematic samples
+* discard the variables with too many missing values
+* impute (if needed) the features with a reasoable number of missing values
+
+
+### Missing values
+
+```{r fig.height=10, fig.width= 8}
+idn <- rubus_targeted %>% 
+  dplyr::select(13:102) %>% 
+  gather(metabolite,value) %>% 
+  group_by(metabolite) %>% 
+  summarise(NAfrac = sum(is.na(value))) 
+
+idn%>% 
+  ggplot() + 
+  geom_point(aes(x = NAfrac, y = metabolite)) + 
+  theme_light()
+```
+
+Here we cleaarly see that many metabolites are characterized by a large fraction of missing values. High missing variables should be disregarded, but what does it mean, 'high'?
+
+The answer to this question is very much dependent on the experimental design and on the objective of the study. In the specific case I would consider how the samples are distributed across the study factors (color, variety and location).
+
+```{r}
+table(rubus_targeted$variety, rubus_targeted$location)
+table(rubus_targeted$variety, rubus_targeted$color)
+```
+
+This table tells us something interesting, apart from "T" the different varieties are coming either from Vigalzano or Berry Plant. In addition the varieties are either red or yellow. This means that, in principle, it would be impossible 
+
+* to investigate the dependence of the metabolic profile on the location (what is called interaction)
+* to investigate the association between color and variety (which actually does not make any sense since the color is a genetic propery)
+
+Since here we are dealing with NAs, we can see that a metabolite characteristic of "FG" or "GQ" could have been detected only in two samples, so a first reasonable choice could be to keep the metabolites that are not NAs at least in two samples. 
+
+After applying this filter, a "manual" visualization of the distribution of the data across the variety could allow a more principled variable selection
+
+
+```{r}
+met_out <- idn %>% 
+  filter(NAfrac > 51) %>% 
+  pull(metabolite)
+
+
+## print what we are not looking at ...
+met_out
+```
+
+already this choice can be used to exclude 39 metabolites, for the others we have to make some manual check
+
+```{r}
+x1 <- rubus_targeted %>% 
+  select(-met_out)
+```
+
+so we set up a visualization tool ...
+
+```{r}
+
+## vanillin is OK
+## `3-OH-benzaldehyde` is interesting ...
+
+x1 %>% 
+  ggplot() + 
+  geom_jitter(aes(x = variety, y = `quercetin-3-Glc`, col = color), width = 0.1) +
+  scale_color_brewer(palette = "Set1") + 
+  xlab("") + 
+  theme_light()
+```
+
+so, basically a full plot of these things can be really good to decide what metabolites should be kept in the list of "interesting ones"
+A more "automatic" method could be to say: "please keep only the metabolites which were detected in the 100% of the samples belonging to a specific variety". I agree that 100% is a quite high percentage, but here we have varieties with only two samples ... not a really good experimental design (it is indeed strongly unbalanced in terms of varieties).
+
+
+```{r}
+met_out1 <- rubus_targeted %>% 
+  dplyr::select(variety,13:102) %>% 
+  gather(metabolite,value,-variety) %>% 
+  group_by(metabolite,variety) %>% 
+  summarise(NAfrac = sum(is.na(value))/length(value)) %>% 
+  filter(NAfrac != 1) %>% 
+  pull(metabolite) %>% 
+  unique(.)
+```
+
+
+so the data matrix will be
+
+```{r}
+x2 <- rubus_targeted %>% 
+  select(variety, color, met_out1)
+```
+
+
+and we can visualize the distribution of the 
+```{r}
+x2 %>% 
+  ggplot() + 
+  geom_jitter(aes(x = variety, y = `procyanidin B2 + B4`, col = color), width = 0.1) +
+  scale_color_brewer(palette = "Set1") + 
+  xlab("") + 
+  theme_light()
+```
+
+
+The final message is that, there is not an unique good rule fordealing with this issue, the important thing is to keep in mind!!
+
+After removing the variables with a lerge number of NAs, one have to decide what to do with the remining missing values. The best choice would be to rely on statistical methods which hare inherently able to deal with NAs, as an alternative "imputation" coul dbe performed on analytical bases
+
+* by using the analytical detection limit in the case of targeted analyses
+* by using the technical detector noise level i untargeted analyses
+* ...
+
+Since we do not have the LOD of the compounds, in the specific case of this demo we will impute missing values extracting a random number between zero and half of the minimum value measured for a specific metabolite
+
+```{r}
+
+myimputer <- function(v){
+  naid <- is.na(v)
+  newval <- runif(sum(naid), max = min(v, na.rm = TRUE)/2)
+  out <- v
+  out[naid] <- newval
+  return(out)
+}
+
+x2_imp <- x2 %>% 
+  select(-variety,-color) %>% 
+  mutate_all(myimputer) %>% 
+  add_column(variety = x2$variety, color = x2$color, .before = 1)
+```
+
+
+
+
+### Data Distribution
+Many statistical methods assume that the measured data are normally distributed. From a fundamental point of view, the central role of the normal distribution comes from the so called "central limit theorem". In many practical case, however measured data are not normally distributed ... so applying methods designed for normally distributed variables to non normally distribued variables could lead to a biased results.
+
+Let's give a look to the distribution of one of the variable in our dataset. this can be done "visually" by using the so called q-q plot 
+
+```{r}
+## this is not really good 
+qqnorm(x2$`quercetin-3-Glc`)
+qqline(x2$`quercetin-3-Glc`)
+```
+
+In presence of deviation from normality (here we could spend a lot of time on that ...) it is common to rely on data transformation to improve the overall distribution of the data. 
+For metabolomics data (or concentration data), log transformation.
+
+
+```{r}
+## with log transformation the situation improves 
+qqnorm(log10(x2$`quercetin-3-Glc`), col = as.numeric(factor(x2$variety)), pch = 19)
+qqline(log10(x2$`quercetin-3-Glc`))
+```
+
+
+As you can see the situation is still not perfect, but we have to remember that here we are dealing with different varieties and this can constitute a relevant confounding factor. This aspect have to be remembere when the outcomes of the study could be affected by relevant confounding factors. as a general rule, log transformation for metabolomics data is suggested.
+
+
+## Variable Correlation
+In targeted and untargeted metabolomics data we expect strong correlations among variables. In such type of data correlation has three origins
+
+* biological: metabolites are not independent, for obvious biological reasons
+* analytical: in untargeted analyses the same molecule is represented by many variables (peaks in NMR and MS spectra ...)
+* chance: there is always the possibility of finding random correlations when measuring a lot of variables 
+
+to illustrate the last point let's look to a completely random data matrix ... 
+
+```{r}
+x_rnd <- matrix(rnorm(20*1000),nrow = 20)
+```
+
+So here we have really nothing inside ...
+
+
+```{r}
+cor_rnd <- cor(x_rnd)
+hist(cor_rnd[upper.tri(cor_rnd)], main = paste(round(range(cor_rnd[upper.tri(cor_rnd)]), digit = 2)))
+
+```
+
+So, for random reasons you can get a remarkably high level of chance correlations ... do you see the meaning of that?
+
+The important point is that you cannot get rid of that, you should accept that some of your positive findings will be "false discoveries". The only think you can do to chack that is either to rely on independent knowledge (other experiments) or plan a validation follow-up of your study.
+
+
+In our real case scenario, the package corrplot can be used to visualize the overall structure of correlation of the data matrix
+
+```{r}
+library(corrplot)
+```
+
+```{r fig.height=11, fig.width=11}
+x2_corr <- cor(x2_imp %>% select(-variety,-color) %>% as.matrix() %>% log10())
+corrplot::corrplot(x2_corr, order = "hclust")
+```
+
+Which can be used to find/discuss potential relations between the metabolites.
+
+## Data Normalization and outlying samples
+Before proceeding with the "real" data analysis, the last point which have to be checked on the raw data is the distribution of the samples in the multivariate space. This could indeed be used to identify possible aalytical trends or clearly outlying samples.
+
+Principal component analysis is the ideal tool to perfor this type of checks. the stronger "organization" of the data will be indeed visible in the first principal components. PCA in R can be performed in many way, here we illustrate how to use factomineR and FactoExtra, two handy packages which can help in facilitating this step.
+
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+```
+
+With factomineR PCA can be computed as follows
+
+```{r}
+## mean cenering and scaling are the default options
+myPCA <- PCA(x2_imp %>% select(-color,-variety) %>% as.matrix() %>% log10(), graph = FALSE)
+```
+
+And the results can be then visualized as a function of the color
+
+```{r}
+fviz_pca_ind(myPCA, habillage = factor(x2_imp$color), invisible = "quali")
+```
+
+```{r}
+fviz_pca_ind(myPCA, habillage = factor(x2_imp$variety), invisible = "quali", axes = c(1,2))
+```
+
+The plots show a clear grouping of the samples depending on the variaety and on the color. The absence of "extreme" samples suggests a good analytical quality and the contemporary absence of strongl outliers.
+
+The first two components are accountin for less then the 30% of the total variance, and this suggest that this two dimensional representation is not able to capture the ful complexity of the data, even if the expected factors contributing to variability are well represented in the projection.
+
+
+
+## Data Matrix analysis - Univariate
+After all the previous preliminary checks the data analyst should be familiar with the data and rather confident on their quality. It is now time to "interrogate" them under the light of the initial scientific question.
+
+The objective here, it is not only to look to the data, but possibly to generalize (with a given level of confidence) the outcomes of the study from the level of the "sample" to the level of the population. Statistics enters the workflow exactly at this point, because the objective is to be able to say something valid (or at list likely valid) beyond the data at hand
+
+In the present case, we are interested in distinguishing the color and, possibly, the varieties, finding which metabolites are able to act as "biomarkers". A first possible data analysis strategy is then to consider each metabolite separately and model it as a function of the factors of the study. The situation here is quite simple, but in a clinical setting the univariate model can become easily quite complicated (individuals, followed over time, with treatments and potential clinical factors like age, bmi, ecc, ecc)
+
+In R such type of modeling can be implemented in a compact and elegant way by using tidyverse and broom.
+
+Let's start with the first and "simpler" question. Red vs Yellow, with a t-test 
+
+```{r}
+library(broom)
+r_vs_y <- x2_imp %>% 
+  gather(metabolite,value,-color,-variety) %>% 
+  mutate(value_l = log10(value)) %>% 
+  group_by(metabolite) %>% 
+  do(tidy(t.test(value_l~color, data = .)))
+
+r_vs_y
+  
+```
+
+So now we have a set of tests with their associated p-values ... one could select the alpha value, let's say 0.05 and identify the putative biomarkers
+
+```{r}
+r_vs_y %>% 
+  filter(p.value < 0.05) 
+```
+
+This stright appraoch has, however, a know limitation: false positives.
+
+the point is that if you check a lot of variables (metabolites) and you ask yourself if at least one of them is different, there is always a chance that you will find "chance" differences (as we did for correlation), even if there is not a "real" difference at the population level.
+To see that let's take our random data matrix
+
+```{r}
+data_rnd  <- x_rnd%>% 
+  as_tibble() %>% 
+  add_column(color = rep(c("R","Y"), each = 10), .before = 1)
+
+data_rnd
+```
+
+and now we run the same testing on the 1000 variables
+
+```{r}
+r_vs_y_rnd <-  data_rnd%>% 
+  gather(metabolite,value,-color) %>% 
+  group_by(metabolite) %>% 
+  do(tidy(t.test(value~color, data = .))) %>% 
+  filter(p.value < 0.05)
+
+r_vs_y_rnd
+```
+
+I have 50 biomarkers even if my data are containing nothing!!!
+
+This issue is known as multiple testing problem and it is unavoidable when you have a general question and you measure a lot of properties. For a tutorial introduction see "Franceschi, Pietro, Marco Giordan, and Ron Wehrens. "Multiple comparisons in mass-spectrometry-based-omics technologies." TrAC Trends in Analytical Chemistry 50 (2013): 11-21."
+
+Statisticians know well the issue and, over time, they implemented a series of srategies to "correct" the p-values in order to compensate for the false positives (called "false discoveries")
+
+In R, the correction is quite strigforward and it is implemented by the p.adjust function
+
+```{r}
+r_vs_y_markers <- r_vs_y %>% 
+  mutate(p_corr = p.adjust(p.value)) %>% 
+  filter(p_corr < 0.05) 
+
+r_vs_y_markers
+```
+
+These 18 metabolites can be then see as the putative biomarkers which can be generalized at the population level with a reasoable "confidence".
+
+Let's visualize on e of them ...
+
+```{r fig.height=15, fig.width=10}
+x2_imp %>% 
+  gather(metabolite, value,-color,-variety) %>% 
+  ggplot() + 
+  geom_jitter(aes(x = color, y = value, col = variety), width = 0.1) +
+  facet_wrap(~metabolite, scales = "free", ncol= 6) + 
+  scale_color_brewer(palette = "Set1") + 
+  scale_y_log10() + 
+  xlab("") + 
+  theme_light()
+```
+
+
+But here we see a really interesting phenomenon!
+
+Apparently,  many of the "color" markers are indeed variety markers. In terms of biology we could then say that in absence of the pigments the different varieties behave differently.
+
+To try to rationalize that, the "color" analysis should be complemented with a search for varietal biomarkes. Unfortunately performing this type of analysis we are facing one of the big weaknesses of the experimental design: the varieties are not represented by an equal number of samples, and this actually limitate our possibilities ...
+
+```{r}
+table(x2_imp$variety,x2_imp$color)
+```
+
+Just for illustrative purposes we will focus on the varieties with more than 5 samples and use standard linear modeling to identify potential biomarkers by univariate analysis. This is a sort of ANOVA. As you will see the mechanics of such type of analyses is not strightforword. In addition, some of you could note that since we are working with log transformed intensities, a more principled choice would be to use a generalized model instead of a standard lm ... but I woul dconsider these as "advanced topics" and, if you are interested, just show up during the rest of the week ...  
+
+
+
+
+
+
+
+
+## Data matrix analysis - Mulivariate
+PLS-(DA) and Random Forest
+
+
+
