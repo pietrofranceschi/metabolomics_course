@@ -11,11 +11,21 @@ Note:
 container.
 
 
-## Option 1: Run the container from Docker Hub (Linux host)
+## Option 1: Run the container from Docker Hub
+
+On Linux machine:
 
 ```sh
-docker run --rm -d -p 8787:8787 -e DISABLE_AUTH=true --name metabolomics_course \
+docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course \
     -v$HOME:/home/rstudio/host \
+    pietrofranceschi/metabolomics_course
+```
+
+on MS Windows:
+
+```sh
+docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course \
+    -v%HOMEDRIVE%%HOMEPATH%:/home/rstudio/host \
     pietrofranceschi/metabolomics_course
 ```
 
@@ -25,14 +35,14 @@ docker run --rm -d -p 8787:8787 -e DISABLE_AUTH=true --name metabolomics_course 
 git clone https://github.com/pietrofranceschi/metabolomics_course.git
 cd metabolomics_course
 docker build . --tag metabolomics_course
-docker run --rm -d -p 8787:8787 -e DISABLE_AUTH=true --name metabolomics_course \
+docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course \
     -v$HOME:/home/rstudio/host \
     metabolomics_course
 ```
 
 ## Open RStudio
 
-Open a browser and go to 127.0.0.1:8787.
+Open a browser and go to 127.0.0.1:8788.
 
 ## Stop (and destroy) the container
 
