@@ -26,7 +26,177 @@ Peak detection will result in a set of "peak lists" which are not immediately co
 * interesting samples are never identical ...
 
 To construct a reasonably good data matrix we have then to match the indivisual peaklists into a consensus list of "features".
-Mass shifts are usually small and easier to control - at the end of the story we implement a sort of "binning" -, to compensate for chromatographic shifts a specific alignment step (also colled retention time correction) is required.  
+Mass shifts are usually small and easier to control - at the end of the story to do that some sort of "binning" is implemented- to compensate for chromatographic shifts, instead, a specific alignment step (also colled retention time correction) is required. 
+After retention time correction, the peak lists will be "matched" across the samples in a process called "grouping". 
+
+### Retention time correction: warping
+As we discussed in the lecture, time warping can be used to find the best "average" alignment among a group of profiles
+
+```{r}
+## here we load a group of 1D LcMS tics
+load("/home/rstudio/data/tics.RData")
+```
+
+to plot the first 10 
+
+```{r message=FALSE}
+p <- plot_ly()
+for(i in 1:nrow(ptw_tics)){
+  p <- add_trace(p, x = 1:ncol(ptw_tics), y = ptw_tics[i,], mode = "lines", opacity = 0.8, line = list(width = 0.8, color = "darkblue"))
+}
+p
+```
+
+
+As you can see the presence of shifts is clear. Parametric time warping can be used to "align" the features against a reference trace
+
+```{r}
+library(ptw)
+
+## the degree of warping
+deg <- 1
+
+## here below we actually do the warping with the rewuired degree
+coeffs <- rep(0, times = deg + 1)
+coeffs[2] <- 1
+
+warped <- ptw(ref = ptw_tics[1,],                     ## I'm using the first trace as reference
+              samp = ptw_tics,
+              warp.type = "individual", 
+              optim.crit = "RMS", 
+              init.coef = coeffs)                    
+
+```
+
+If now we plot the outcomes. The lower graph shows the results of warping against the black trace. 
+
+```{r message=FALSE}
+p1 <- plot_ly()
+for(i in 1:nrow(warped$warped.sample)){
+  p1 <- add_trace(p1, 
+                  x = 1:ncol(warped$warped.sample), 
+                  y = warped$warped.sample[i,], mode = "lines", opacity = 0.8, line = list(width = 0.8, color = "red"))
+}
+p1 <- add_trace(p1, 
+                x = 1:ncol(warped$warped.sample), 
+                y = warped$warped.sample[1,], mode = "lines", opacity = 0.8, line = list(width = 0.8, color = "black")) 
+
+  
+subplot(p, p1, nrows = 2, shareX = TRUE, shareY = TRUE, heights = c(0.5, 0.5))
+```
+
+
+Some question and something to try
+
+* What happens if you change the degree of the "warping" function?
+* What criteria would you use to find the "best" matching?
+* Can you figure out what would happen if you try to align very different samples?
+* ADVANCED: can you try to see what happens if you warp the log/sqrt transformed tics? 
+
+
+The previous demo implements parametric time warping. In xcms dynamic time worping is instead implemented via the obiwarp method. It is based on the code at http://obi-warp.sourceforge.net but supports alignment of multiple samples by aligning each against a center sample. Obiwarp does ot work on the TICS, but instead strikes a consensus warping across multiple m/z slices. 
+
+Let's see how it works on a set of 10 apple injections. Now we should be able to interpret all the following code ... ;-)
+
+
+```{r}
+cdfs <- list.files("/home/rstudio/data/", "*.CDF", full.names = TRUE)
+raw_data <- readMSData(cdfs, mode = "onDisk")
+```
+
+```{r}
+cwp <- CentWaveParam(peakwidth = c(6, 30))
+xdata <- findChromPeaks(raw_data, param = cwp)
+
+xdata
+```
+
+And here the warping takes place ...
+
+```{r}
+xdata <- adjustRtime(xdata, param = ObiwarpParam(binSize = 0.6))
+```
+
+So now the xdata object should have a "experimental" retention time and an adjusted retention time ...
+
+```{r}
+## Extract adjusted retention times
+head(rtime(xdata))
+```
+
+```{r}
+## Extract adjusted retention times
+head(rtime(xdata, adjusted = FALSE))
+```
+
+Which are (slightly) different. The textual visualization is not at all the "best" solution if you want to see haow much you actually corrected the retention time ...
+
+```{r}
+plotAdjustedRtime(xdata)
+```
+
+
+This gives you an immediate feeling on how much you have been warping the time axies. Here the shift is really small (some seconds), speaking of a rellay good analytical reproducibility.
+
+If one get large correction it is worth giving a look to the raw data to understand if something was strange was going on. I would say that proposed time shifts which are smaller than the typical chromatographic peak width can be considered OK.
+
+As a further check, the alignment of the extreacted ion cromatograms of known compound could be really useful.
+
+```{r}
+quercetin_eic <- chromatogram(xdata, mz = c(288.9,289.1), adjustedRtime = FALSE)
+```
+
+We can also see the peaks which were detected!
+
+```{r}
+quercetin_pk <- chromPeaks(quercetin_eic)
+quercetin_pk
+```
+
+And now a nice plot ...
+
+```{r message=FALSE}
+p2 <- plot_ly()
+for(i in 1:length(quercetin_eic)){
+  p2 <- add_trace(p2, 
+                  x = rtime(quercetin_eic[[i]]), 
+                  y = intensity(quercetin_eic[[i]]), mode = "lines", opacity = 0.8, line = list(width = 0.8, color = "darkblue"))
+}
+
+for(i in 1:nrow(quercetin_pk)){
+  p2 <- add_segments(p2,
+                     x = quercetin_pk[i,"rt"], xend = quercetin_pk[i,"rt"],
+                     y = 0, yend = quercetin_pk[i,"maxo"],
+                     line = list(color = "darkred")
+                     )
+}
+
+
+p2
+```
+
+
+Some question and something to try
+
+* Can you interpret the content of quercetin_pk?
+* Are you happy with the alignment?
+* Can you do the same with some other metabolite known to be present in apple (see the Data_Visualization file ...)?
+* ADVANCED: to really see the effect of rtcorrection one should look to the previous plot befor rt correction. This can be done by a specific parameter in the "chromatogram" function ... (use ?chromatogram to get it ...)
+
+
+
+### Grouping: matching peaks in features
+
+The vertical lines in the previous plot show that the detected peaks are not perfectly aligned across the samples. In view of what we have seen, however, we are quite sure that all previous peaks correspond to the same ion, which is produced in the ionization of quercetin.
+
+To create the final data matrix, where one variable will be associated to the same ion across all samples,  the previous peaks should then be "grouped" into one feature.
+
+
+
+
+
+
+
 
 
 
