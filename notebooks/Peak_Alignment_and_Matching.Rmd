@@ -22,11 +22,11 @@ library(plotly)
 Peak detection will result in a set of "peak lists" which are not immediately comparable. Several phenomena are responsible for that
 
 * mass accuracy is never infinite, so even the same ion will be never detected exactly at the same m/z
-* chromaography is never perfectly reproducible
+* chromatography is never perfectly reproducible
 * interesting samples are never identical ...
 
-To construct a reasonably good data matrix we have then to match the indivisual peaklists into a consensus list of "features".
-Mass shifts are usually small and easier to control - at the end of the story to do that some sort of "binning" is implemented- to compensate for chromatographic shifts, instead, a specific alignment step (also colled retention time correction) is required. 
+To construct a reasonably good data matrix we have then to match the individual peak-lists into a consensus list of "features".
+Mass shifts are usually small and easier to control - at the end of the story to do that some sort of "binning" is implemented- to compensate for chromatographic shifts, instead, a specific alignment step (also called retention time correction) is required. 
 After retention time correction, the peak lists will be "matched" across the samples in a process called "grouping". 
 
 ### Retention time correction: warping
@@ -53,7 +53,7 @@ As you can see the presence of shifts is clear. Parametric time warping can be u
 ```{r}
 library(ptw)
 
-## the degree of warping
+## set the degree of warping
 deg <- 1
 
 ## here below we actually do the warping with the rewuired degree
@@ -91,15 +91,14 @@ Some question and something to try
 * What happens if you change the degree of the "warping" function?
 * What criteria would you use to find the "best" matching?
 * Can you figure out what would happen if you try to align very different samples?
-* ADVANCED: can you try to see what happens if you warp the log/sqrt transformed tics? 
+* ADVANCED: can you try to see what happens if you warp the log/sqrt transformed tics? Is the output different?
+
+The previous demo implements parametric time warping. In xcms dynamic time warping is instead implemented via the obiwarp method. It is based on the code at http://obi-warp.sourceforge.net but supports alignment of multiple samples by aligning each against a center sample. Obiwarp does not work on the TICS, but instead strikes a consensus warping across multiple m/z slices. 
+
+Let's see how alignment works on a set of 10 apple injections. Now we should be able to interpret all the following code ... ;-)
 
 
-The previous demo implements parametric time warping. In xcms dynamic time worping is instead implemented via the obiwarp method. It is based on the code at http://obi-warp.sourceforge.net but supports alignment of multiple samples by aligning each against a center sample. Obiwarp does ot work on the TICS, but instead strikes a consensus warping across multiple m/z slices. 
-
-Let's see how it works on a set of 10 apple injections. Now we should be able to interpret all the following code ... ;-)
-
-
-```{r}
+```{r message=FALSE, warning=FALSE}
 cdfs <- list.files("/home/rstudio/data/", "*.CDF", full.names = TRUE)
 raw_data <- readMSData(cdfs, mode = "onDisk")
 ```
@@ -117,7 +116,7 @@ And here the warping takes place ...
 xdata <- adjustRtime(xdata, param = ObiwarpParam(binSize = 0.6))
 ```
 
-So now the xdata object should have a "experimental" retention time and an adjusted retention time ...
+So now the xdata object should have an "experimental" retention time and an adjusted retention time ...
 
 ```{r}
 ## Extract adjusted retention times
@@ -129,24 +128,24 @@ head(rtime(xdata))
 head(rtime(xdata, adjusted = FALSE))
 ```
 
-Which are (slightly) different. The textual visualization is not at all the "best" solution if you want to see haow much you actually corrected the retention time ...
+Which are (slightly) different. The textual visualization is not at all the "best" solution if you want to see how much you actually corrected the retention time ...
 
 ```{r}
 plotAdjustedRtime(xdata)
 ```
 
 
-This gives you an immediate feeling on how much you have been warping the time axies. Here the shift is really small (some seconds), speaking of a rellay good analytical reproducibility.
+This gives you an immediate feeling on how much you have been warping the time axis. Here the shift is really small (some seconds), speaking of a really good analytic reproducibility.
 
-If one get large correction it is worth giving a look to the raw data to understand if something was strange was going on. I would say that proposed time shifts which are smaller than the typical chromatographic peak width can be considered OK.
+If one gets large corrections it is worth giving a look to the raw data to understand if something strange was going on. I would say that proposed time shifts which are smaller than the typical chromatographic peak width can be considered OK.
 
-As a further check, the alignment of the extreacted ion cromatograms of known compound could be really useful.
+As a further check, the alignment of the extracted ion cromatograms of known compound could be really useful.
 
 ```{r}
 quercetin_eic <- chromatogram(xdata, mz = c(288.9,289.1), adjustedRtime = FALSE)
 ```
 
-We can also see the peaks which were detected!
+We can also see the peaks which were detected! Can you interpret the table?
 
 ```{r}
 quercetin_pk <- chromPeaks(quercetin_eic)
@@ -181,16 +180,92 @@ Some question and something to try
 * Can you interpret the content of quercetin_pk?
 * Are you happy with the alignment?
 * Can you do the same with some other metabolite known to be present in apple (see the Data_Visualization file ...)?
-* ADVANCED: to really see the effect of rtcorrection one should look to the previous plot befor rt correction. This can be done by a specific parameter in the "chromatogram" function ... (use ?chromatogram to get it ...)
-
-
+* ADVANCED: to really see the effect of rt correction one should look to the previous plot before rt correction. This can be done by a specific parameter in the "chromatogram" function ... (use ?chromatogram to get it ...)
 
 ### Grouping: matching peaks in features
 
-The vertical lines in the previous plot show that the detected peaks are not perfectly aligned across the samples. In view of what we have seen, however, we are quite sure that all previous peaks correspond to the same ion, which is produced in the ionization of quercetin.
+The vertical lines in the previous plot show that even after retention time correction the detected peaks are not perfectly aligned across the samples. In view of what we have seen, however, we are quite sure that all previous peaks correspond to the same ion, which is produced in the ionization of quercetin.
 
-To create the final data matrix, where one variable will be associated to the same ion across all samples, the previous peaks should then be "grouped" into one feature. 
+In the "final" data matrices all previous peak should be matched (grouped) in one feature. As we discussed in the lecture, this is done by using a density base approach. It is important to point out that since a metabolite can be missing from some of the samples, one cannot expect that a feature  will "contain" peaks detected in all samples. 
 
+The parameters which can be adjusted in this step are
+
+* sampleGroups: A vector of the same length than samples defining the sample group assignments. This have to be present.
+* bw: this is the width (in seconds) of the kernel used for the estimation of the density. A reasonable choice should take into account the "expected" rt shift after correction 
+* minSamples: the minimum number of samples where corresponding peaks have to be present to be considered as potential features
+* minFraction: the same as before but here the relative number is considered
+
+Obviously  only one parameter between minSamples and minFraction should be specified. If the run contains sample groups (referring, for example to different sample classes), minSamples and minFraction will be calculated per sample group.
+
+The group structure of the data can be also specified at the beginning of the analysis. For reason of space we have not been covering that in the demo. But specific details can be found in the online vignette of xcms.
+
+Before performing the grouping on the complete dataset is always a good idea to give a look to what happens to some of the "usual suspects" which we know to be present in the matrix under analysis.
+
+For our apples we stick to quercetin:
+
+```{r message=FALSE, warning=FALSE}
+## Define the parameters for the peak density method, as we did for peak detection
+pdp <- PeakDensityParam(sampleGroups = 1:10,
+                        minFraction = 0.8, bw = 30)
+
+## and this function makes a nice plot
+plotChromPeakDensity(xdata, mz = c(288.9,289.1), param = pdp,
+                     pch = 16, xlim = c(100, 600))
+
+
+```
+
+QUESTION: Could you interpret what you see? What are the dots? What is the black line?
+
+The previous plot can be used to optimize the grouping parameters. When you are happy with the results, the full grouping can be performed as follows
+
+```{r}
+xdata <- groupChromPeaks(xdata, param = pdp)
+```
+
+
+OK, now my xdata object will contain not only the list of the peaks found in all samples, but also the list of "features" detected in my samples. The features are the actual variables which will be present in the data matrix.
+
+To extract them 
+
+```{r}
+myfeatures <- featureDefinitions(xdata)
+
+head(myfeatures)
+```
+
+QUESTION: Can you interpret the previous table?
+
+The data matrix, instead, can be extracted as follows. The data matrix is in reality transposed and should be turned the other way around before running to PCA, PLS-DA and so on ... 
+
+```{r}
+DM <- featureValues(xdata, value = "into")
+
+head(DM)
+```
+
+The "value" parameter specifies which intensity value should be put in the matrix. Popular choices are "into", which is the chromatographic pic area, and "maxo", which is the maximum value for the feature inside the chromatographic peak.
+
+QUESTION: the matrix contains NAs. What do they mean?
+
+xcms implements a very clever algorithm to "impute" missing values, which is based on the idea that if a peak is not found, a reasonable number to put there would be the "residual" signal which was detected where the peak would have been present.
+
+```{r}
+## fill peaks
+xdata <- fillChromPeaks(xdata)
+
+head(featureValues(xdata))
+```
+
+As you can see now the NAs are gone
+
+Before moving on, I would like to highlight a very handy function which can be of great help in evaluating the reliability of the features. 
+
+Why this is relevant will be the subject of the next demo.
+
+```{r}
+head(featureSummary(xdata))
+```
 
 
 

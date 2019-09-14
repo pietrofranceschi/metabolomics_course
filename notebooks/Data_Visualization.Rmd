@@ -17,11 +17,13 @@ The tutorial is based on the "new" version of xcms, which has been the subject o
 
 ### A point on methodology
 
-As you will see, the practicals are organized as .Rmd files. This type of file can be easily used to integrate text and code chunks. Each code chunk can be run separately and the differennt parameters can be easily changed to inspect the results. My suggestion for the work is the following:
+As you will see, the practicals are organized as .Rmd files. This type of file can be easily used to integrate text and code chunks. Each code chunk can be run separately and the different parameters can be easily changed to inspect the results. My suggestion for the work is the following:
 
 * run the code and tweak the parameters
 * add text comment which can help you in remembering/understanding
 * save a copy of this file in your local machine, so you will be able to bring it home 
+
+I've tried to set-up some interactive visualization tools based on plotly. xcms 3 already natively contains informative plotting functions, which are however less easy to use. In my opinion the best is to rely on a mixture of internal and external plotting routines.
 
 
 ### Data organization
@@ -29,7 +31,7 @@ As you will see, the practicals are organized as .Rmd files. This type of file c
 The characteristics and the format of LC-MS data has been already discussed in the lecture. xcms supports analysis of LC/MS data from files in (AIA/ANDI) NetCDF, mzML/mzXML and mzData format. For the actual data import Bioconductor’s mzR is used. Raw data can be quite large, so the package allows to load them in memory or keep them on disk. The first solution is clearly faster, but is impractical for large investigations. 
 
 ### The data
-In this demo we will use a publicly available dataset  ....
+In this demo, we will mainly used a MS untargeted metabolomic dataset we measured several years ago during a spike-in experiment on apples. The data are available at metabolights and as ancillary data of the R BioMark Package. The dataset is also the subject of a Journal of Chemometrics publication (https://doi.org/10.1002/cem.1420). 
 
 # Data Loading
 
@@ -146,18 +148,18 @@ plot_ly(color = I("black"), showlegend = F) %>%
 
 Some question and something to try
 
-* what are the peaks which show-up on the TIC priofile?
+* what are the peaks which show-up on the TIC profile?
 * can you go back and check their spectra?
-* would you trust to what is coming out afer scan 1300?
+* would you trust to what is coming out after scan 1300?
 * can you figure out why the bpi is cleaner?
 * do you see a potential use of bpis and tics?
 
 ### Visualizing the Extracted Ion Chromatograms
 
-The last important things to extract from raw data are ion specific chromatograms. As we discussed in the lecture, the ionization of a metabolite will produce a plethora of ions so peaks in specific extracted ion chromatograms will tell us that a metabolite is actually present in the samples. Extracted ion chromatograms (or traces) have to be extracted from the raw data with a instrument specific tolerance on the mass trace (normally down to some ppms for high res instruments). This tolerance account for the inherent variability in the spectrometer measuremet process.
+The last important things to extract from raw data are ion specific chromatograms. As we discussed in the lecture, the ionization of a metabolite will produce a plethora of ions so peaks in specific extracted ion chromatograms will tell us that a metabolite is actually present in the samples. Extracted ion chromatograms (or traces) have to be extracted from the raw data with a instrument specific tolerance on the mass trace (normally down to some ppms for high res instruments). This tolerance account for the inherent variability in the spectrometer measurement process.
 
 
-Cheching the presence and the shape of ion associated to know compounds in my matrix it is always a good starting point of a data analysis optimization. This will indeed allow to make an educated choice of the pipeline parameters. In the case of apple, a good candidate could be malic acid. 
+Checking the presence and the shape of ion associated to know compounds in my matrix it is always a good starting point of a data analysis optimization. This will indeed allow to make an educated choice of the pipeline parameters. In the case of apple, a good candidate could be malic acid. 
 
 
 ```{r}
@@ -173,7 +175,7 @@ plot_ly(color = I("black"), showlegend = F) %>%
   add_trace(x = 1: length(rtime(malic_acid[[1]])), 
             y = intensity(malic_acid[[1]]), mode = "lines") %>% 
   layout(
-    title = "Extracte Ion chromatogram",
+    title = "Extracted Ion Chromatogram",
     xaxis = list(title = "Scan Number")
   )
 ```

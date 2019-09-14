@@ -20,16 +20,16 @@ library(factoextra)
 ## Introduction
 At the end of pre-processing we will end-up with a nice and well aligned data matrix. For a typical experiment this matrix will have tenth of rows (samples) and several thousands of columns (features). 
 
-Given the huge number of variables it would be a clever idea to try to filter out unreliable features in order to start focussing on potentially important ions.
+Given the huge number of variables it would be a clever idea to try to filter out unreliable features in order to start focusing on potentially important ions.
 
-A sensible feature filtering approach could be based on some criteria built on the following experimental parameters.
+A sensible feature filtering approach could be based on some criteria built on the following experimental parameters
 
 * fraction of missing values
 * intensity
 * variability
 
 ### Missing Values
-As we discussed in the lecture, in untergeted datasets missing values are generated when a feature is not detected on a specific sample. This can happen either because the compound associated to that feature was under the detection limit in that sample, or because of an error during the peak picking/alignment pipeline.
+As we discussed in the lecture, in untargeted data sets missing values are generated when a feature is not detected on a specific sample. This can happen either because the compound associated to that feature was under the detection limit in that sample, or because of an error during the peak picking/alignment pipeline.
 
 Since missing values can create problems during the data analysis they can conveniently be "imputed". There is nothing bad on that, but no one of us would consider a reliable marker a feature where the number of imputed values was too large ... there indeed we are measuring basically nothing in our samples ...
 
@@ -37,10 +37,11 @@ The fraction of missing values is then a good first exclusion criterion to get r
 
 A commonly accepted criterion is to retain a feature if was detected in at least the 80% of the samples belonging to one of the study groups. 
 
-To show how to do that we rely on a LC-MS untargeted dataset, which was kindly provided by Oscar and Maria
+To show how to do that we rely on a LC-MS untargeted data set, which was kindly provided by Oscar and Maria
 
 ```{r}
 load("/home/rstudio/data/filterdata.RData")
+dim(DM)
 ```
 
 So we have 46 samples divided in four classes and 51908 features. 
@@ -51,7 +52,7 @@ sclass <- gsub('[[:digit:]]+', '', colnames(DM))
 table(sclass)
 ```
 
-To find the acceptable sample per class with the 80 rule we can do as follows
+To find the acceptable number of samples per class with the 80 rule we can do as follows
 
 ```{r}
 accepted_fraction <- 0.8
@@ -59,7 +60,7 @@ accepted_fraction <- 0.8
 ceiling(table(sclass)*accepted_fraction)
 ```
 
-Ok, xcms saves the number of samples per group where a fature was actually found inside the features infos.
+Ok, xcms saves the number of samples per group where a feature was actually found inside the features info.
 
 To monitor the effects of filtering on the data matrix we set up a "fast" PCA visualization
 
@@ -74,20 +75,22 @@ fviz_pca_ind(myPCA, habillage = factor(sclass),
 The overall plot shows:
 
 * partial separation among the classes
-* potential analytical drift
+* analytical drift ... QUESTION: why can I say that?
+* there is a problematic ctrl sample
 
 
+The number of missing values for each feature is included in the groupinfo dataframe
 
 ```{r}
 head(groupinfo)
 ```
 
-Now we try to see how many features are actually surviving to the previous cleanup
+Now we create a vectors which tells which features survive to the previous role
 
 ```{r}
 na_in <- groupinfo %>% 
   as_tibble() %>% 
-  mutate(CTR = ifelse(CTR > 12,1,0),
+  mutate(CTR = ifelse(CTR > 12,1,0),                 ## here I put the sample limits for each class
          TREATMENT = ifelse(TREATMENT > 10,1,0),
          DISEASE = ifelse(DISEASE > 10,1,0), 
          QC = ifelse(QC > 7,1,0)) %>% 
@@ -100,7 +103,9 @@ table(na_in)
 
 ```
 
-feature_in is a boolean vector which can be used to subset reliably detected features. As we can see from the previous table, more than 50% of the features are not surviving to the previous filtering
+feature_in is a boolean vector which can be used to subset reliably detected features. As we can see from the previous table, the filter on the number of NAs strongly reduces the number of features included in the DM
+
+The NA cleaned matrix is the following
 ```{r}
 DM_na <- DM[na_in,]
 ```
@@ -117,20 +122,22 @@ fviz_pca_ind(myPCA, habillage = factor(sclass),
 
 Even if one should be careful to compare different PCAs (the are different projections!) we can say something here:
 
-* the percentage of variance explained by the first componenent increases 
+* the percentage of variance explained by the first component increases 
+* the "higher variance" picture shows an improved separation between the classes
+* the analytical drift is still clear!
 
 Something to try
 
-* What happens if you chenge the number of minimal samples in the different classes?
+* What happens if you change the number of minimal samples in the different classes?
 
 ## Intensity 
-At the end of the analysis the morst interesting feature will be characterized by means of MS/MS experiments. In order to do that, the intensity of the signal should exceed an instrument specific threshold. In this specific dataset a threshold of 5000 would be a reasonable choice. 
+At the end of the analysis, the most interesting features will subjected to MS/MS experiments. In order to do that, the intensity of the signal should exceed an instrument specific threshold. In this specific data set a threshold of 5000 is a reasonable choice. 
 
-The idea is then to get rid of the features with a median intensity lower than the threshold
+The idea is then to get rid of the features with a median intensity lower than the threshold.
 
 ```{r}
 ## set the threshold
-threshold <- 10000
+threshold <- 5000
 
 ## calculate the median intensities by class!
 medians <- t(apply(DM_na, 1, function(x) tapply(x, sclass, median)))
@@ -146,7 +153,7 @@ DM_na_int <- DM_na[int_in,]
 ```
 
 
-The numbers on the plot title are showing you the number of features which survive to this second level of filtering
+The numbers on the plot title are showing you the number of features which survive to this second level of filtering. 
 
 How the data look like now? 
 
@@ -159,14 +166,16 @@ fviz_pca_ind(myPCA, habillage = factor(sclass),
 
 
 Another time we are "pumping" variance in the first two components. 
+
+QUESTION: My filter acts on the median, not on the mean. Is this a reasonable choice? Why?
 Play around with the threshold and look what happens !
 
 ## Variability
-The last type of filter we would like to implement takes into account the variability of a feature. Using QC samples.
+The last type of filter we would like to implement takes into account the variability of a feature. An high variability on the study samples is clearly a good indication that a feature could be highly informative ... but to be reliable a feature should show low variability in QC samples! 
 
-Since QCs represent repeated injections of the same sample, the variability of the features in these samples is due only to analytical factors. It makes then sense to exclude from the analysis the features which are showing in the "real" samples a variability lower than the one measured on the QC samples.
+Since QCs represent repeated injections of the same sample, the variability of the features in these samples is indeed due only to analytical factors. It makes then sense to exclude from the analysis the features which are showing in the "real" samples a variability lower than the one measured on the QC samples.
 
-Which measure of variability one should use can be a matter of discussion. In chemistry, relative standard deviation is quite popular. The possible downside of this choice is that in presence of several sample classes the distribution of the intensity for the different features could be non normal, making the stndard deviation a fuzzy parameter. 
+Which measure of variability one should use can be a matter of discussion. In chemistry, relative standard deviation is quite popular. The possible downside of this choice is that in presence of several sample classes the distribution of the intensity for the different features could be non normal, making the standard deviation a fuzzy parameter. 
 
 Just to increase the level of confusion here I will calculate a "non parametric" version of the previous parameter calculating the relative interquartile deviation (relative to the median!).
 
@@ -184,9 +193,9 @@ hist(log10(rel_irq_qc) , col = "steelblue", main = "QCs")
 hist(log10(rel_irq_s) , col = "darkred", main = "Samples")
 ```
 
-Which lucly enough shows that the variability in samples is higher than the one in the QCs
+Which luckily enough shows that the variability in samples is higher than the one in the QCs
 
-Tha last filter can be then implemented as ...
+The last filter can be then implemented as ...
 
 ```{r}
 var_in <- rel_irq_s > rel_irq_qc
@@ -211,13 +220,13 @@ fviz_pca_ind(myPCA, habillage = factor(sclass),
 
 What this PCA tells us:
 
-* there is a potential outliers (mislabelling among the controls)
+* there is a potential outliers (mislabeling among the controls)
 * treated samples are separated from CTRL and diseased
 * the analytical drift is still visible, but is "orthogonal" to the main variability coming from the study design.
 
+ADVANCED: 
 
-
-ADVANCED: What does it happen if you use a different feature variability measure? Can you tweak the functions to do that?
+* What does it happen if you use a different feature variability measure? Can you tweak the functions to do that?
 
 
 
