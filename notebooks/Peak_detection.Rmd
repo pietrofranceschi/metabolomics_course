@@ -19,7 +19,7 @@ library(plotly)
 
 ## Introduction
 
-As we discussed in the lecture, metabolites produce peaks in the LC-MS 2D data, but a single metabolite is likely to produce a large number of peaks due to the nature of the ionization process occuring inside the MS interface. 
+As we discussed in the lecture, metabolites produce peaks in the LC-MS 2D data, but a single metabolite is likely to produce a large number of peaks due to the nature of the ionization process occurring inside the MS interface. 
 Even with this added level of complexity (which generates a "redundant" data matrix with all the associated caveats), to detect metabolites it is necessary to be able to automatically detect peaks and ...
 
 * there are a lot of different algorithms which can do that
@@ -31,15 +31,12 @@ Even with this added level of complexity (which generates a "redundant" data mat
 ... so be careful, and take your time to strive for "the best"
 
 
-
 First of all let's read in ine of our apple injections
 
-```{r}
+```{r message=FALSE}
 apple1 <- readMSData(files = "/home/rstudio/data/apple_control_neg_001.CDF",
                      mode = "onDisk")
 ```
-
-
 
 
 ### Matched Filter 
@@ -68,13 +65,11 @@ apple_peaks <- findChromPeaks(apple1, param = matc_param)
 head(chromPeaks(apple_peaks))
 ```
 
-
 Here we have a table with several columns ... can you figure out the meaning of each one of them?
-
 
 A visual representation of the peak position will surely help 
 
-First we get the bpi
+First we get the base peak ion chromatogram 
 ```{r}
 applebpi <- chromatogram(apple1, aggregationFun = "max")
 ```
@@ -112,7 +107,6 @@ Some question and something to try
 ### CentWave
 CentWave is the second peak detection algorithm we will briefly touch. As discussed in the lecture it works well for high resolution/high accuracy instruments. The idea is really smart and the detailed can be found in a BMC Bioinformatics publication.
 
-
 As for MatchedFilter, there is plenty of space to tweak the parameters ... here we will mention only four of them
 
 * ppm: this is the "width" of the mass stability region
@@ -128,7 +122,6 @@ cw_param <- CentWaveParam(ppm = 50, snthresh = 10, peakwidth = c(6,30), prefilte
 cw_param
 ```
 
-
 Now we run the algorithm ...
 
 ```{r}
@@ -137,7 +130,6 @@ apple_peaks1 <- findChromPeaks(apple1, param = cw_param)
 ## the actual "position" position of the peaks can be seen by using the chromPeaks method
 head(chromPeaks(apple_peaks1))
 ```
-
 
 The look and feel of the output is almost the same. 
 
@@ -159,7 +151,6 @@ BPI <- plot_ly(color = I("black"), showlegend = F) %>%
   layout(xaxis = list(title = "rt")
   )
 
-
 subplot(map, BPI, nrows = 2, shareX = TRUE, heights = c(0.8, 0.2))
 ```
 
@@ -173,7 +164,6 @@ Some question and something to try
 
 To help you in performing the comparison of the two methods I'm putting here some code to overlay the results ...
 
-
 ```{r message=FALSE}
 plot_ly() %>%
   add_trace(x = pk[,"rt"], y = pk[,"mz"], opacity = 0.5, name = 'MF', mode = 'markers', marker = list(color = "red")) %>% 
@@ -182,17 +172,16 @@ plot_ly() %>%
 
 ```
 
-
 In conclusion, I would like to remark that xcms implements a large set of plotting utilities. They are not interactive (like in this demo), but can be used more efficiently on large datasets. For example, the peak positions can be visualized on a specific file 
 
 ```{r}
 plotChromPeaks(apple_peaks, file = 1)
 ```
 
-
 ### On the choice of optimal parameters
 I'm quite convinced that one of the main outcomes of the previous exercise is the feeling that things can be really messed-up with the wrong choice of parameters. So the natural question is: "How can I find the best set ?".
-As a metter of fact, this is 
+
+As a metter of fact, there is not  
 
 
 

@@ -189,7 +189,7 @@ Some question and something to try
 
 The vertical lines in the previous plot show that the detected peaks are not perfectly aligned across the samples. In view of what we have seen, however, we are quite sure that all previous peaks correspond to the same ion, which is produced in the ionization of quercetin.
 
-To create the final data matrix, where one variable will be associated to the same ion across all samples,  the previous peaks should then be "grouped" into one feature.
+To create the final data matrix, where one variable will be associated to the same ion across all samples, the previous peaks should then be "grouped" into one feature. 
 
 
 

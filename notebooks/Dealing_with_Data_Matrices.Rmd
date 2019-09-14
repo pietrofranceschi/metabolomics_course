@@ -12,7 +12,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r message=FALSE}
 library(plotly)
-library(BioMark)
 library(factoextra)
 library(FactoMineR)
 library(tidyverse)
@@ -119,7 +118,7 @@ so we set up a visualization tool ...
 
 x1 %>% 
   ggplot() + 
-  geom_jitter(aes(x = variety, y = `quercetin-3-Glc`, col = color), width = 0.1) +
+  geom_jitter(aes(x = variety, y = `3-OH-benzaldehyde`, col = color), width = 0.1) +
   scale_color_brewer(palette = "Set1") + 
   xlab("") + 
   theme_light()
@@ -301,7 +300,7 @@ Let's start with the first and "simpler" question. Red vs Yellow, with a t-test
 
 ```{r}
 library(broom)
-r_vs_y <- x2_imp %>% 
+r_vs_y <- x2_imp %>% \\\
   gather(metabolite,value,-color,-variety) %>% 
   mutate(value_l = log10(value)) %>% 
   group_by(metabolite) %>% 
