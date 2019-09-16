@@ -24,9 +24,7 @@ docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course 
 on MS Windows:
 
 ```sh
-docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course \
-    -v%HOMEDRIVE%%HOMEPATH%:/home/rstudio/host \
-    pietrofranceschi/metabolomics_course
+docker run --rm -d -p 8788:8787 -e DISABLE_AUTH=true --name metabolomics_course -v%HOMEDRIVE%%HOMEPATH%:/home/rstudio/host pietrofranceschi/metabolomics_course
 ```
 
 ## Option 2: Build and run the container (Linux host)
